@@ -29,6 +29,7 @@ import com.cl.entity.view.JiuzhentongzhiView;
 
 import com.cl.service.JiuzhentongzhiService;
 import com.cl.service.TokenService;
+import com.cl.service.impl.NotificationServiceImpl;
 import com.cl.utils.PageUtils;
 import com.cl.utils.R;
 import com.cl.utils.MPUtil;
@@ -47,6 +48,9 @@ import com.cl.utils.CommonUtil;
 public class JiuzhentongzhiController {
     @Autowired
     private JiuzhentongzhiService jiuzhentongzhiService;
+
+    @Autowired
+    private NotificationServiceImpl notificationService;
 
 
 
@@ -190,15 +194,67 @@ public class JiuzhentongzhiController {
         jiuzhentongzhiService.deleteBatchIds(Arrays.asList(ids));
         return R.ok();
     }
-    
-	
 
+    /**
+     * 获取发送失败的通知列表
+     */
+    @RequestMapping("/failedList")
+    @SysLog("查询发送失败的通知")
+    public R failedList(HttpServletRequest request){
+        List<JiuzhentongzhiEntity> list = notificationService.getFailedNotifications();
+        return R.ok().put("data", list);
+    }
 
+    /**
+     * 获取待发送的通知列表
+     */
+    @RequestMapping("/pendingList")
+    @SysLog("查询待发送的通知")
+    public R pendingList(HttpServletRequest request){
+        List<JiuzhentongzhiEntity> list = notificationService.getPendingNotifications();
+        return R.ok().put("data", list);
+    }
 
+    /**
+     * 重试发送通知
+     */
+    @RequestMapping("/retry/{id}")
+    @SysLog("重试发送通知")
+    public R retry(@PathVariable("id") Long id, HttpServletRequest request){
+        boolean success = notificationService.retryNotification(id);
+        if(success) {
+            return R.ok("通知重试发送成功");
+        } else {
+            return R.error("通知重试发送失败，请检查重试次数或失败原因");
+        }
+    }
 
+    /**
+     * 批量重试发送通知
+     */
+    @RequestMapping("/retryBatch")
+    @SysLog("批量重试发送通知")
+    public R retryBatch(@RequestBody Long[] ids, HttpServletRequest request){
+        int successCount = notificationService.batchRetryNotifications(ids);
+        return R.ok("成功重试 " + successCount + " 条通知");
+    }
 
-
-
-
+    /**
+     * 手动发送通知（用于管理员手动触发）
+     */
+    @RequestMapping("/send/{id}")
+    @SysLog("手动发送通知")
+    public R send(@PathVariable("id") Long id, HttpServletRequest request){
+        JiuzhentongzhiEntity notification = jiuzhentongzhiService.selectById(id);
+        if(notification == null) {
+            return R.error("通知不存在");
+        }
+        boolean success = notificationService.sendNotification(notification);
+        if(success) {
+            return R.ok("通知发送成功");
+        } else {
+            return R.error("通知发送失败，请查看失败原因");
+        }
+    }
 
 }

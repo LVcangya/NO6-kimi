@@ -76,14 +76,23 @@
 		}
 		ruleFormRef.value.validate((valid) => {
 			if (valid) {
-				let url = `${tableName.value}/update`
+				// 使用批量审核接口，支持通知自动发送
+				let url = `${tableName.value}/shBatch`
 				context?.$http({
 					url: url,
 					method: 'post',
-					data: approvalForm.value
+					data: [approvalForm.value.id],
+					params: {
+						sfsh: approvalForm.value.sfsh,
+						shhf: approvalForm.value.shhf
+					}
 				}).then(res => {
-
-					context?.$toolUtil.message('审核成功', 'success', obj => {
+					let msg = '审核成功'
+					// 如果有通知发送结果，显示在消息中
+					if(res.data.notificationMsg && res.data.notificationMsg.length > 0) {
+						msg += '\n' + res.data.notificationMsg.join('\n')
+					}
+					context?.$toolUtil.message(msg, 'success', obj => {
 						approvalVisible.value = false
 					})
 					emit('shChange',type,approvalForm.value)

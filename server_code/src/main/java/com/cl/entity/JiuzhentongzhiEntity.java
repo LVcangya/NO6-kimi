@@ -103,6 +103,32 @@ public class JiuzhentongzhiEntity<T> implements Serializable {
 					
 	private String tongzhibeizhu;
 	
+	/**
+	 * 发送状态：0-待发送，1-已发送，2-发送失败
+	 */
+					
+	private Integer sendstatus;
+	
+	/**
+	 * 重试次数
+	 */
+					
+	private Integer retrycount;
+	
+	/**
+	 * 失败原因
+	 */
+					
+	private String failreason;
+	
+	/**
+	 * 最后发送时间
+	 */
+				
+	@JsonFormat(locale="zh", timezone="GMT+8", pattern="yyyy-MM-dd HH:mm:ss")
+	@DateTimeFormat 		
+	private Date lastsendtime;
+	
 
 	@JsonFormat(locale="zh", timezone="GMT+8", pattern="yyyy-MM-dd HH:mm:ss")
 	@DateTimeFormat
@@ -216,6 +242,54 @@ public class JiuzhentongzhiEntity<T> implements Serializable {
 	 */
 	public String getTongzhibeizhu() {
 		return tongzhibeizhu;
+	}
+	/**
+	 * 设置：发送状态
+	 */
+	public void setSendstatus(Integer sendstatus) {
+		this.sendstatus = sendstatus;
+	}
+	/**
+	 * 获取：发送状态
+	 */
+	public Integer getSendstatus() {
+		return sendstatus;
+	}
+	/**
+	 * 设置：重试次数
+	 */
+	public void setRetrycount(Integer retrycount) {
+		this.retrycount = retrycount;
+	}
+	/**
+	 * 获取：重试次数
+	 */
+	public Integer getRetrycount() {
+		return retrycount;
+	}
+	/**
+	 * 设置：失败原因
+	 */
+	public void setFailreason(String failreason) {
+		this.failreason = failreason;
+	}
+	/**
+	 * 获取：失败原因
+	 */
+	public String getFailreason() {
+		return failreason;
+	}
+	/**
+	 * 设置：最后发送时间
+	 */
+	public void setLastsendtime(Date lastsendtime) {
+		this.lastsendtime = lastsendtime;
+	}
+	/**
+	 * 获取：最后发送时间
+	 */
+	public Date getLastsendtime() {
+		return lastsendtime;
 	}
 
 }

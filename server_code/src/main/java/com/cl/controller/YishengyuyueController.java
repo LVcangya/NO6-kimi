@@ -29,6 +29,7 @@ import com.cl.entity.view.YishengyuyueView;
 
 import com.cl.service.YishengyuyueService;
 import com.cl.service.TokenService;
+import com.cl.service.impl.NotificationServiceImpl;
 import com.cl.utils.PageUtils;
 import com.cl.utils.R;
 import com.cl.utils.MPUtil;
@@ -47,6 +48,9 @@ import com.cl.utils.CommonUtil;
 public class YishengyuyueController {
     @Autowired
     private YishengyuyueService yishengyuyueService;
+
+    @Autowired
+    private NotificationServiceImpl notificationService;
 
 
 
@@ -179,20 +183,38 @@ public class YishengyuyueController {
 
     /**
      * 审核
+     * 审核通过后自动发送就诊通知
      */
     @RequestMapping("/shBatch")
     @Transactional
     @SysLog("审核医生预约")
     public R update(@RequestBody Long[] ids, @RequestParam String sfsh, @RequestParam String shhf){
         List<YishengyuyueEntity> list = new ArrayList<YishengyuyueEntity>();
+        List<String> notificationResults = new ArrayList<String>();
+
         for(Long id : ids) {
             YishengyuyueEntity yishengyuyue = yishengyuyueService.selectById(id);
             yishengyuyue.setSfsh(sfsh);
             yishengyuyue.setShhf(shhf);
             list.add(yishengyuyue);
+
+            // 如果审核通过，自动发送就诊通知
+            if("是".equals(sfsh)) {
+                boolean sendSuccess = notificationService.createAndSendNotification(yishengyuyue);
+                if(sendSuccess) {
+                    notificationResults.add("预约编号" + yishengyuyue.getYuyuebianhao() + "的通知发送成功");
+                } else {
+                    notificationResults.add("预约编号" + yishengyuyue.getYuyuebianhao() + "的通知发送失败，已记录到系统");
+                }
+            }
         }
         yishengyuyueService.updateBatchById(list);
-        return R.ok();
+
+        R result = R.ok();
+        if(!notificationResults.isEmpty()) {
+            result.put("notificationMsg", notificationResults);
+        }
+        return result;
     }
 
 

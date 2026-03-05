@@ -23,6 +23,23 @@
 							</el-input>
 						</div>
 					</div>
+					<div class="search_view">
+						<div class="search_label">
+							发送状态：
+						</div>
+						<div class="search_box">
+							<el-select
+								class="search_sel"
+								clearable
+								v-model="searchQuery.sendstatus"
+								placeholder="发送状态"
+								>
+								<el-option label="待发送" :value="0"></el-option>
+								<el-option label="已发送" :value="1"></el-option>
+								<el-option label="发送失败" :value="2"></el-option>
+							</el-select>
+						</div>
+					</div>
 					<div class="search_btn_view">
 						<el-button class="search_btn" type="primary" @click="searchClick()" size="small">搜索</el-button>
 					</div>
@@ -35,6 +52,14 @@
 					<el-button class="del_btn" type="danger" :disabled="selRows.length?false:true" @click="delClick(null)"  v-if="btnAuth('jiuzhentongzhi','删除')">
 						<i class="iconfont icon-shanchu4"></i>
 						删除
+					</el-button>
+					<el-button class="retry_btn" type="warning" :disabled="selRows.length?false:true" @click="batchRetryClick" v-if="btnAuth('jiuzhentongzhi','重试')">
+						<i class="iconfont icon-refresh"></i>
+						批量重试
+					</el-button>
+					<el-button class="failed_btn" type="info" @click="showFailedList" v-if="btnAuth('jiuzhentongzhi','查看失败')">
+						<i class="iconfont icon-error"></i>
+						查看失败记录
 					</el-button>
 				</div>
 			</div>
@@ -139,7 +164,55 @@
 						{{scope.row.tongzhibeizhu}}
 					</template>
 				</el-table-column>
-				<el-table-column label="操作" width="300" :resizable='true' :sortable='true' align="left" header-align="left">
+				<el-table-column min-width="120"
+					:resizable='true'
+					:sortable='true'
+					align="left"
+					header-align="left"
+					prop="sendstatus"
+					label="发送状态">
+					<template #default="scope">
+						<el-tag v-if="scope.row.sendstatus == 0" type="warning">待发送</el-tag>
+						<el-tag v-else-if="scope.row.sendstatus == 1" type="success">已发送</el-tag>
+						<el-tag v-else-if="scope.row.sendstatus == 2" type="danger">发送失败</el-tag>
+						<el-tag v-else type="info">未知</el-tag>
+					</template>
+				</el-table-column>
+				<el-table-column min-width="100"
+					:resizable='true'
+					:sortable='true'
+					align="left"
+					header-align="left"
+					prop="retrycount"
+					label="重试次数">
+					<template #default="scope">
+						{{scope.row.retrycount || 0}}
+					</template>
+				</el-table-column>
+				<el-table-column min-width="200"
+					:resizable='true'
+					:sortable='true'
+					align="left"
+					header-align="left"
+					prop="failreason"
+					label="失败原因">
+					<template #default="scope">
+						<span v-if="scope.row.failreason" style="color: #f56c6c;">{{scope.row.failreason}}</span>
+						<span v-else>-</span>
+					</template>
+				</el-table-column>
+				<el-table-column min-width="160"
+					:resizable='true'
+					:sortable='true'
+					align="left"
+					header-align="left"
+					prop="lastsendtime"
+					label="最后发送时间">
+					<template #default="scope">
+						{{scope.row.lastsendtime}}
+					</template>
+				</el-table-column>
+				<el-table-column label="操作" width="350" :resizable='true' :sortable='true' align="left" header-align="left">
 					<template #default="scope">
 						<el-button class="view_btn" type="info" v-if=" btnAuth('jiuzhentongzhi','查看')" @click="infoClick(scope.row.id)">
 							<i class="iconfont icon-sousuo2"></i>
@@ -147,10 +220,20 @@
 						</el-button>
 						<el-button class="edit_btn" type="primary" @click="editClick(scope.row.id)" v-if=" btnAuth('jiuzhentongzhi','修改')">
 							<i class="iconfont icon-xiugai5"></i>
-							修改						</el-button>
+							修改
+						</el-button>
 						<el-button class="del_btn" type="danger" @click="delClick(scope.row.id)"  v-if="btnAuth('jiuzhentongzhi','删除')">
 							<i class="iconfont icon-shanchu4"></i>
-							删除						</el-button>
+							删除
+						</el-button>
+						<el-button class="retry_btn" type="warning" v-if="scope.row.sendstatus == 2 && btnAuth('jiuzhentongzhi','重试')" @click="retryClick(scope.row.id)">
+							<i class="iconfont icon-refresh"></i>
+							重试
+						</el-button>
+						<el-button class="send_btn" type="success" v-if="scope.row.sendstatus != 1 && btnAuth('jiuzhentongzhi','发送')" @click="sendClick(scope.row.id)">
+							<i class="iconfont icon-send"></i>
+							发送
+						</el-button>
 						<el-button class="cross_btn" v-if="btnAuth('jiuzhentongzhi','签到')" type="success" @click="jiuzhenqiandaoCrossAddOrUpdateHandler(scope.row,'cross','','','','')">
 							<i class="iconfont icon-dingdan3"></i>
 							签到
@@ -174,6 +257,34 @@
 		</div>
 		<formModel ref="formRef" @formModelChange="formModelChange"></formModel>
 		<jiuzhenqiandaoFormModel ref="jiuzhenqiandaoFormModelRef" @formModelChange="formModelChange"></jiuzhenqiandaoFormModel>
+
+		<!-- 失败记录弹窗 -->
+		<el-dialog v-model="failedDialogVisible" title="发送失败的通知记录" width="80%">
+			<el-table :data="failedList" border v-loading="failedLoading">
+				<el-table-column prop="tongzhibianhao" label="通知编号" min-width="140"></el-table-column>
+				<el-table-column prop="yishengzhanghao" label="医生账号" min-width="140"></el-table-column>
+				<el-table-column prop="zhanghao" label="用户账号" min-width="140"></el-table-column>
+				<el-table-column prop="shouji" label="手机" min-width="140"></el-table-column>
+				<el-table-column prop="retrycount" label="重试次数" min-width="100"></el-table-column>
+				<el-table-column prop="failreason" label="失败原因" min-width="200">
+					<template #default="scope">
+						<span style="color: #f56c6c;">{{scope.row.failreason}}</span>
+					</template>
+				</el-table-column>
+				<el-table-column label="操作" width="200">
+					<template #default="scope">
+						<el-button type="warning" size="small" @click="retryClick(scope.row.id)">重试</el-button>
+						<el-button type="primary" size="small" @click="sendClick(scope.row.id)">立即发送</el-button>
+					</template>
+				</el-table-column>
+			</el-table>
+			<template #footer>
+				<span class="dialog-footer">
+					<el-button @click="failedDialogVisible = false">关闭</el-button>
+					<el-button type="primary" @click="retryAllFailed">全部重试</el-button>
+				</span>
+			</template>
+		</el-dialog>
 	</div>
 </template>
 <script setup>
@@ -240,6 +351,9 @@
 		}
 		if(searchQuery.value.zhanghao&&searchQuery.value.zhanghao!=''){
 			params['zhanghao'] = '%' + searchQuery.value.zhanghao + '%'
+		}
+		if(searchQuery.value.sendstatus !== undefined && searchQuery.value.sendstatus !== ''){
+			params['sendstatus'] = searchQuery.value.sendstatus
 		}
 		context.$http({
 			url: `${tableName}/page`,
@@ -389,6 +503,137 @@
 			jiuzhenqiandaoFormModelRef.value.init(row.id,'cross','签到',row,'jiuzhentongzhi',statusColumnName,tips,statusColumnValue)
 		})
     }
+
+	// 重试发送通知
+	const retryClick = (id) => {
+		ElMessageBox.confirm('确定要重试发送该通知吗？', '提示', {
+			confirmButtonText: '确定',
+			cancelButtonText: '取消',
+			type: 'warning'
+		}).then(() => {
+			context.$http({
+				url: `${tableName}/retry/${id}`,
+				method: 'get'
+			}).then(res => {
+				if(res.data.code == 0) {
+					context?.$toolUtil.message(res.data.msg || '重试发送成功', 'success')
+					getList()
+					if(failedDialogVisible.value) {
+						getFailedList()
+					}
+				} else {
+					context?.$toolUtil.message(res.data.msg || '重试发送失败', 'error')
+				}
+			})
+		}).catch(() => {})
+	}
+
+	// 批量重试
+	const batchRetryClick = () => {
+		if(!selRows.value.length) {
+			context?.$toolUtil.message('请选择要重试的记录', 'error')
+			return
+		}
+		const ids = selRows.value.map(row => row.id)
+		ElMessageBox.confirm(`确定要批量重试选中的 ${ids.length} 条通知吗？`, '提示', {
+			confirmButtonText: '确定',
+			cancelButtonText: '取消',
+			type: 'warning'
+		}).then(() => {
+			context.$http({
+				url: `${tableName}/retryBatch`,
+				method: 'post',
+				data: ids
+			}).then(res => {
+				if(res.data.code == 0) {
+					context?.$toolUtil.message(res.data.msg || '批量重试成功', 'success')
+					getList()
+				} else {
+					context?.$toolUtil.message(res.data.msg || '批量重试失败', 'error')
+				}
+			})
+		}).catch(() => {})
+	}
+
+	// 手动发送通知
+	const sendClick = (id) => {
+		ElMessageBox.confirm('确定要立即发送该通知吗？', '提示', {
+			confirmButtonText: '确定',
+			cancelButtonText: '取消',
+			type: 'warning'
+		}).then(() => {
+			context.$http({
+				url: `${tableName}/send/${id}`,
+				method: 'get'
+			}).then(res => {
+				if(res.data.code == 0) {
+					context?.$toolUtil.message(res.data.msg || '发送成功', 'success')
+					getList()
+					if(failedDialogVisible.value) {
+						getFailedList()
+					}
+				} else {
+					context?.$toolUtil.message(res.data.msg || '发送失败', 'error')
+				}
+			})
+		}).catch(() => {})
+	}
+
+	// 失败记录相关
+	const failedDialogVisible = ref(false)
+	const failedList = ref([])
+	const failedLoading = ref(false)
+
+	// 查看失败记录
+	const showFailedList = () => {
+		failedDialogVisible.value = true
+		getFailedList()
+	}
+
+	// 获取失败列表
+	const getFailedList = () => {
+		failedLoading.value = true
+		context.$http({
+			url: `${tableName}/failedList`,
+			method: 'get'
+		}).then(res => {
+			failedLoading.value = false
+			if(res.data.code == 0) {
+				failedList.value = res.data.data
+			}
+		}).catch(() => {
+			failedLoading.value = false
+		})
+	}
+
+	// 重试所有失败记录
+	const retryAllFailed = () => {
+		if(!failedList.value.length) {
+			context?.$toolUtil.message('没有失败记录需要重试', 'info')
+			return
+		}
+		const ids = failedList.value.map(item => item.id)
+		ElMessageBox.confirm(`确定要重试所有 ${ids.length} 条失败记录吗？`, '提示', {
+			confirmButtonText: '确定',
+			cancelButtonText: '取消',
+			type: 'warning'
+		}).then(() => {
+			context.$http({
+				url: `${tableName}/retryBatch`,
+				method: 'post',
+				data: ids
+			}).then(res => {
+				if(res.data.code == 0) {
+					context?.$toolUtil.message(res.data.msg || '批量重试成功', 'success')
+					getFailedList()
+					getList()
+				} else {
+					context?.$toolUtil.message(res.data.msg || '批量重试失败', 'error')
+				}
+			})
+		}).catch(() => {})
+	}
+
 	//初始化
 	const init = () => {
 		getList()
@@ -501,56 +746,15 @@
 						}
 					}
 				}
-				tr:hover {
-					td {
-					}
-				}
 			}
 		}
 	}
-	// 分页器
-	.el-pagination {
-		// 总页码
-		:deep(.el-pagination__total) {
-		}
-		// 上一页
-		:deep(.btn-prev) {
-		}
-		// 下一页
-		:deep(.btn-next) {
-		}
-		// 上一页禁用
-		:deep(.btn-prev:disabled) {
-		}
-		// 下一页禁用
-		:deep(.btn-next:disabled) {
-		}
-		// 页码
-		:deep(.el-pager) {
-			// 数字
-			.number {
-			}
-			// 数字悬浮
-			.number:hover {
-			}
-			// 选中
-			.number.is-active {
-			}
-		}
-		// sizes
-		:deep(.el-pagination__sizes) {
-			display: inline-block;
-			vertical-align: top;
-			font-size: 13px;
-			line-height: 28px;
-			height: 28px;
-			.el-select {
-			}
-		}
-		// 跳页
-		:deep(.el-pagination__jump) {
-			// 输入框
-			.el-input {
+	// 操作栏样式
+	.el-table-column--operate {
+		.cell {
+			// 按钮间距
+			.el-button {
+				margin: 0 4px;
 			}
 		}
 	}
